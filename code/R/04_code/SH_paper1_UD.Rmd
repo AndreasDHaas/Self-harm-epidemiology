@@ -1,0 +1,2311 @@
+---
+title: "Self-harm study"
+subtitle: "Intentional self-harm and mortality from unnatural causes - part 2"
+author:
+- name: Veronika Whitesell Skrivankova
+  email: veronika.skrivankova@unibe.ch
+  affiliation: Institute for Social and  Preventive Medicine (ISPM), University of Bern, Bern, Switzerland
+date: "Last Update: `r format(Sys.time(), '%B %d, %Y, %H:%M (%Z)')`"
+output: 
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 2
+    toc_float: 
+      collapsed: false
+    number_sections: false
+    theme: sandstone
+
+---
+
+
+<!-- ----------------------------------------------->
+<!--            Style & Setup                     -->
+<!-- ----------------------------------------------->
+<!-- Here some html styling details are specified -->
+
+<style>
+div.comment { background-color:#E6E9FF; border-radius: 5px; padding: 10px;}
+div.todo { background-color:#CFD5FC; border-radius: 5px; padding: 10px;}
+
+.column-left{
+  float: left;
+  width: 40%;
+  text-align: left;
+}
+
+.column-right{
+  float: right;
+  width: 60%;
+  text-align: left;
+}
+.figure {
+   margin-top: 20px;
+   margin-bottom: 50px;
+}
+table {
+    margin-top: 20px;
+    margin-bottom: 50px !important;
+}
+</style>
+
+```{css html_setting, echo=FALSE}
+TOC {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 250px;
+  height: 100%;
+  overflow:auto;
+}
+
+body, td {
+  font-family: sans-serif;
+  background-color: white;
+  font-size: 13px;
+  text-align: justify;
+}
+
+h1, .h1, h2, .h2, h3, .h3 {
+  margin-top: 30px;
+}
+
+p.caption {
+  font-size: 0.9em;
+  font-style: italic;
+  color: grey;
+  margin-right: 10%;
+  margin-left: 10%;  
+  text-align: justify;
+}
+
+
+# This css script manages the width and margins of the html file opened on a screen
+body .main-container {
+  width: 100% ;
+  max-width: unset;
+}
+body {
+  max-width: unset;
+  margin-left: auto;
+  margin-right: 100px;
+}
+```
+```{r chunk_specifications, include=FALSE}
+##  This code chunk defines the default settings for the code chunk specifications
+knitr::opts_chunk$set(echo = F, message = F, fig.height = 6, fig.width = 10, fig.align = "center")
+```
+
+```{r libraries, message = FALSE, echo=F}
+##  Here the r libraries are managed and helper functions are defined
+rm(list = ls())
+
+##  Install (if necessary) and load packages
+if(!requireNamespace("pacman", quietly = T))   install.packages("pacman")
+
+pacman::p_load("cowplot", "data.table","dplyr","DiagrammeR", "DiagrammeRsvg", "DT",
+               "epitools","forestploter","flextable", "forcats","foreign","flexsurv",
+               "ggplot2","ggsci","glmnet","grid","gridExtra","gtsummary","here","janitor",  
+               "kableExtra","knitr",  "lubridate","lme4", "lmtest", 
+               "magick", "MetBrewer","MASS", "magrittr", "officer",
+               "plotly",  "pander","pixiedust","purrr", 
+               "REDCapR", "Rmisc","readr","rsvg", "readxl","rollRegres","rstpm2",
+               "stringr","scales","survival", "table1", "tidyr","tidycmprsk")
+```
+
+```{r functions, message = FALSE, echo=F}
+###  Define own functions
+
+##  Paste 95% CI from 2 values
+pasteCI = function(x1,x2) {
+  xx = paste0("(", x1, " - ", x2,")") #95%_CI
+  return(xx)
+}
+
+
+##  Format results from Cox regression
+cox.results = function(cox.mod, rHR=2){
+  scox = round(summary(cox.mod)$conf[,c(1,3,4)], rHR) 
+  if ("Pr(>|z|)" %in% colnames(summary(cox.mod)$coef)) {p = round(summary(cox.mod)$coef[,"Pr(>|z|)"], 3)}
+  if ("p" %in% colnames(summary(cox.mod)$coef)) {p = round(summary(cox.mod)$coef[,"p"], 3)}
+  L = dim(scox)[1]
+  for (i in 1:L) {
+    if(!is.na(p[i])&p[i]>0.06) p[i]=round(p[i],2)
+  }
+   for (i in 1:L) {
+    if(!is.na(p[i])&p[i]==0) p[i]="<0.001"
+  }
+  ci.cox = rep(NA,L)
+  for (i in 1:L) ci.cox[i] = paste0("(", scox[i,2], " - ", scox[i,3], ")")  
+  results = cbind(scox[,1], ci.cox, p) 
+  colnames(results) = c("HR","95% CI","p-val")
+  return(results)
+}
+
+
+RP.results = function(mod, rHR=2){
+  ss = coef(summary(mod))[,c(1,2)]
+  scox = round( cbind(ss[,1], ss[,1]-1.96*ss[,2],ss[,1]+1.96*ss[,2]) , rHR ) 
+  p = round(coef(summary(mod))[,4],3)
+  L = dim(scox)[1]
+  for (i in 1:L) {
+    if(!is.na(p[i])&p[i]>0.06) p[i]=round(p[i],2)
+  }
+   for (i in 1:L) {
+    if(!is.na(p[i])&p[i]==0) p[i]="<0.001"
+  }
+  ci.cox = rep(NA,L)
+  for (i in 1:L) ci.cox[i] = paste0("(", scox[i,2], " - ", scox[i,3], ")")  
+  results = cbind(scox[,1], ci.cox, p) 
+  colnames(results) = c("HR","95% CI","p-val")
+  HR = NA
+  for (i in 1:L) HR[i] = paste( results[i,1], results[i,2] )
+  return(list(results, HR))
+}
+
+##  Inverse of the %in% function
+`%notin%` = Negate(`%in%`)
+
+##  Unique items that are not NA
+lu = function(vector){
+  out <- length(na.omit(unique(vector)))
+  return(out)}
+
+
+```
+
+
+<br>
+
+
+
+
+
+<!------------------------>
+<!--    OBJECTIVES      -->
+<!------------------------>
+
+
+<div class = "comment">
+
+**Content of this script:**  
+This study aims to examine the incidence and risk factors of intentional self-harm events, reattempts, and subsequent mortality from unnatural causes among beneficiaries of a private medical insurance scheme (AfA + AfAc population). 
+
+**Objectives**
+
+4.	Examine the incidence of mortality from unnatural causes among individuals with intentional, potential, or no history of self-harm events.
+5.	Evaluate intentional or potential self-harm events, mental disorder, sociodemographic characteristics as predictors of mortality from unnatural causes.
+
+</div>
+
+<br>
+<br>
+<hr style="border:1px solid gray">
+
+ 
+
+<!------------------------>
+<!--    DATA SETS       -->
+<!------------------------>
+
+
+#  DATA SOURCE
+
+We analyse national vital registration data along with longitudinal inpatient and outpatient reimbursement claims data from a South African general medical insurance scheme and a South African HIV disease management program. Included are individuals aged 10 years or older who were covered by the medical insurance scheme at any time between 1 January 2011 and 30 June 2020, or those enrolled in the HIV disease management program at any time between 1 January 2011 to 31 October 2022. Individuals with unknown sex or age are excluded from the analysis. Those with an unconfirmed vital status who could not be linked to the vital registration system, are excluded from the mortality analysis.
+
+
+Raw data were merged and cleaned in *Stata* by Andreas Haas (andreas.haas@unibe.ch), and organized into several datasets that are ready to be used for the analyses: 
+
+- analyseWide: wide table with demographics, start and end of follow-up, comorbidities, and mortality
+
+  - uncensored mortality: death_d_orig death_d_orig cod1_orig cod2_orig 
+  - mortality after end of insurance coverage censored: death_d death_d cod1 cod2 
+  
+  <br>
+  
+- eventsLong: long table with all self-harm events and events of undetermined intent
+
+- episodesLong7 - episodesLong365: long table with self-harm events and events of undetermined intent. 
+  - event number 212 (undetermined intent, unspecific event) has been dropped 
+  - claims that occurred within 7 to 365 days (depending on dataset) from the initial event (claim) were combined into treatment episodes assuming they relate to the same event
+
+ 
+*All datasets were saved in Stata format (dta) version 12.*
+<!-- which can be read into *R* with function '*read.dta()*', package '*foreign*'. -->
+
+
+```{r Running chunks}
+
+runReport = TRUE
+runSensitivity = TRUE
+
+saveCoefs = FALSE   # This should be set to TRUE first time, then can be set to FALSE
+saveFigures = FALSE
+saveTables = FALSE
+
+```
+
+
+
+```{r setup-folders, include=FALSE}
+
+dir.create("Output", showWarnings = FALSE, recursive = TRUE)
+dir.create("Figures", showWarnings = FALSE, recursive = TRUE)
+dir.create("Output/Tables", showWarnings = FALSE, recursive = TRUE) 
+
+
+```
+
+
+```{r Local Working directories}
+
+path_SH   = here::here("")
+path_data = here::here("Data")   
+path_figures = here::here("Figures")
+path_results = here::here("Output")
+
+```
+
+
+```{r Data load}
+
+setwd(path_data)
+dd_wide = read.dta("analyseWide.dta")  # v1.1: includes sex=unspecified
+
+N = lu(dd_wide$patient)
+N.lab = paste0(round(N/10^6), ",", floor((N - 10^6*floor(N/10^6))/ 10^3), ",", N-10^3*floor(N/10^3))
+
+```
+
+# DATA OVERVIEW
+
+The dataset *analyseWide* contains information on `r N.lab ` patients. The variables in this dataset are:  
+
+```{r Variables , eval = runReport}
+
+names(dd_wide)
+
+```
+<br> 
+
+
+```{r Data cleaning}
+
+
+##  AfA vs AfAc scheme
+dd_wide = dd_wide %>% mutate(scheme = ifelse(grepl("^[AFA]", patient), "AfA", "Xxx")) 
+
+##  Exclude Afa members
+# dd_wide = dd_wide %>%
+#   filter(scheme == "Xxx")
+
+dd_wide = dd_wide %>%
+          dplyr::rename(id = patient) %>% 
+          arrange(id) %>%
+          mutate(FU_time = as.numeric(ymd(end) - ymd(start10))/365.25,         # person-time
+                 FU_time_days = as.numeric(ymd(end) - ymd(start10)), 
+                 age_start10 = as.numeric(ymd(start10) - ymd(birth_d))/365.25, # age at study entry = start(10)
+                 age_start10_days = as.numeric(ymd(start10) - ymd(birth_d)))  %>%
+          mutate(age_start10 = ifelse(age_start10<10, 10, age_start10))
+
+FU_sum = round(summary(dd_wide$FU_time),2)[c(3,2,5)]
+
+```
+
+Participants were followed from the entry to the insurance scheme or age 10 year, whichever occurred first, until the exit from the insurance scheme or death, whichever occurred first. The median follow-up time was `r FU_sum[1] ` years (IQR `r FU_sum[2] ` to `r FU_sum[3] ` years).
+
+<br>
+
+## Self-harm (SH) events
+
+```{r SH events}
+
+###  Attach data with SH events
+
+##  Long table: all SH events  
+setwd(path_data)
+dd_long = read.dta("episodesLong7.dta")  
+
+
+##  Remove SH events before age 10 and after the end of FU
+dd_long = dd_long %>% dplyr::rename(id = patient) %>%
+          left_join((dd_wide %>% select(id, start10, end)), by = "id") %>%
+          filter((eSdate > start10) & (eSdate <= end)) 
+
+
+##  First event of each kind
+dd_events_first = dd_long %>%
+            group_by(id, eIntent) %>% 
+            filter(eSdate == min(eSdate, na.rm = TRUE)) %>% 
+            mutate(eSdate_sh1 = ifelse(eIntent=="Self-harm", eSdate, ""),
+                   eSdate_ui1 = ifelse(eIntent=="Undetermined", eSdate, ""),
+                   eEvent_sh1 = ifelse(eIntent=="Self-harm", as.character(eEvent), ""),
+                   eEvent_ui1 = ifelse(eIntent=="Undetermined", as.character(eEvent), ""),
+                   icd_sh1 = ifelse(eIntent=="Self-harm", icd_23, ""),
+                   icd_ui1 = ifelse(eIntent=="Undetermined", icd_23, ""),
+                   eSource_sh1 = ifelse(eIntent=="Self-harm", as.character(eSource), "")) %>% 
+            select(-start10, -end)  
+  
+
+dd_events_first = dd_events_first %>%
+            group_by(id) %>%
+            dplyr::summarize(eSdate_sh1 = paste(eSdate_sh1, collapse=""),
+                             eSdate_ui1 = paste(eSdate_ui1, collapse=""),
+                             eEvent_sh1 = paste(eEvent_sh1, collapse=""),
+                             eEvent_ui1 = paste(eEvent_ui1, collapse=""),
+                             eSource_sh1 = paste(eSource_sh1, collapse=""),
+                             icd_sh1 = paste(icd_sh1, collapse=""),
+                             icd_ui1 = paste(icd_ui1, collapse=""))
+
+
+
+dd_events_first$eSdate_sh1[dd_events_first$eSdate_sh1==""] = NA
+dd_events_first$eSdate_ui1[dd_events_first$eSdate_ui1==""] = NA
+dd_events_first$eEvent_sh1[dd_events_first$eEvent_sh1==""] = NA
+dd_events_first$eEvent_ui1[dd_events_first$eEvent_ui1==""] = NA
+dd_events_first$icd_sh1[dd_events_first$icd_sh1==""] = NA
+dd_events_first$icd_ui1[dd_events_first$icd_ui1==""] = NA
+dd_events_first$eSource_sh1[dd_events_first$eSource_sh1==""] = NA
+dd_events_first$eSource_sh1 = as.factor(dd_events_first$eSource_sh1)
+
+
+##  No. of events, with date of first
+dd_events = dd_long %>%
+            group_by(id, eIntent) %>% 
+            dplyr::summarise(n = n()) %>%
+            pivot_wider(names_from = eIntent, values_from = n, values_fill = 0) %>%
+            dplyr::rename(Self_harm = "Self-harm") %>% 
+            left_join(dd_events_first, by = "id")
+
+
+##  Merge SH events with the main dataset
+dd_wide = dd_wide %>% left_join(dd_events, by = "id") %>% 
+          mutate(Self_harm_n = ifelse(is.na(Self_harm), 0, Self_harm)) %>% 
+          mutate(Self_harm_y = 1*(Self_harm_n>0)) %>% 
+          mutate(Undetermined_n = ifelse(is.na(Undetermined), 0, Undetermined)) %>%
+          mutate(Undetermined_y = 1*(Undetermined_n>0)) %>% 
+          mutate(Self_harm_3 = ifelse(Self_harm_y==1, 2, Undetermined_y))
+
+dd_wide$Self_harm_3 = fct_recode(factor(dd_wide$Self_harm_3), "No event"="0", 
+                                 "Event of undetermined intent"="1", "Self-harm event"="2")
+
+dd_wide = dd_wide %>% mutate(eSdate_sh1 = as_date(as.numeric(eSdate_sh1)))
+
+
+```
+
+
+During the observation period, there were total of `r sum(dd_wide$Self_harm_y==1) ` participants with at least 1 self-harm event. 
+
+```{r SH event table}
+
+tbl_type = rev(table(dd_wide$Self_harm_3))
+tbl_type %>% kable(align = c("l","r"),  table.attr = 'style="width:70%;"',
+                         col.names = c("Type of event","N" ),
+                         caption = "Numbers of participants with at least one intentional self-harm event, 
+                   event of undetermined intent (but no confirmed self-harm event), or no such event.") %>%
+            kable_styling(position = "left") 
+
+```
+
+## Methods of self-harm
+
+```{r Method of SH table}
+
+tbl_meth = table(dd_events_first$eEvent_sh1)
+tbl_meth %>% kable(align = c("l","r"),  table.attr = 'style="width:70%;"',
+                         col.names = c("Method","N" ),
+                         caption = "Methods of intentional self-harm among people admitted with 
+                   first self-harm event.") %>%
+            kable_styling(position = "left") 
+
+```
+
+
+
+## Cause of death
+
+Cause of death was coded by variables *cod1* and *cod2*. In the latter, the category 'Under investigation' was merged with category 'Unknown'. 
+
+
+```{r COD: UD/UI/UK/ND (incl sensitivity)}
+
+dd_wide = dd_wide %>% mutate(cause = cod1) 
+dd_wide = dd_wide %>%
+            mutate(causeX = ifelse(is.na(cause), NA, as.character(cause)),
+                   cause = ifelse(is.na(cause), "No death", as.character(cause))) %>% 
+            mutate(cause = factor(cause),
+                   causeX = factor(causeX)) %>% 
+            mutate(cause = forcats::fct_relevel(cause, "No death"),
+                   causeX = forcats::fct_relevel(causeX, "Natural causes","Unnatural causes"),
+                   sex = forcats::fct_relevel(sex, "Female"))
+
+```
+
+
+
+```{r COD table}
+
+tbl_cause = table(dd_wide$causeX)
+tbl_cause %>% kable(align = c("l","r"),  table.attr = 'style="width:70%;"',
+                         col.names = c("Cause of death","N" ),
+                         caption = "Type of cause of death among the participants during the observation period.") %>%
+            kable_styling(position = "left") 
+
+```
+
+##  Mental disorders
+
+We considered the following categories of mental-health disorders: 
+
+- Organic mental disorders (F00-09)
+- Substance use disorder (F10-F16, F18-F19)
+- Psychotic disorder (F20-29)
+- Bipolar disorder (F31)
+- Depression (F32, F33, F34.1)
+- Anxiety disorder (F40-48)
+- Behavioural syndrome associated with physical factors (F50-F59)
+- Personality disorder (F60-F69)
+- Intellectual disabilities (F70-F79)
+- Developmental disorder (F80-F89)
+- Behavioural disorder (F90-F98)
+
+
+```{r MHD }
+
+##  Other MHD (BHS / INT / DEV/ BHD)
+dd_wide = dd_wide %>% mutate(oth1_y = 1*((bhs1_y+int1_y+dev1_y+bhd1_y)>0)) %>%
+                      mutate(oth1_d = as.Date(ifelse(oth1_y==1, 
+                                                     pmin(ymd(bhs1_d), ymd(int1_d),
+                                                          ymd(dev1_d), ymd(bhd1_d), 
+                                                          na.rm = TRUE), 
+                                                     NA)))
+
+##  Define time since baseline of HIV, MHD, SH
+dd_wide = dd_wide %>% mutate(SH_time  = as.numeric(ymd(eSdate_sh1) - ymd(start10))/365.25,
+                             hiv_time = as.numeric(ymd(hiv1_d) - ymd(start10))/365.25,
+                             org_time = as.numeric(ymd(org1_d) - ymd(start10))/365.25,
+                             su_time  = as.numeric(ymd(su1_d)  - ymd(start10))/365.25,
+                             psy_time = as.numeric(ymd(psy1_d) - ymd(start10))/365.25,
+                             bp_time  = as.numeric(ymd(bp1_d)  - ymd(start10))/365.25,
+                             dep_time = as.numeric(ymd(dep1_d) - ymd(start10))/365.25,
+                             anx_time = as.numeric(ymd(anx1_d) - ymd(start10))/365.25,
+                             per_time = as.numeric(ymd(per1_d) - ymd(start10))/365.25,
+                             oth_time = as.numeric(ymd(oth1_d) - ymd(start10))/365.25, 
+                             bhs_time = as.numeric(ymd(bhs1_d) - ymd(start10))/365.25,
+                             int_time = as.numeric(ymd(int1_d) - ymd(start10))/365.25,
+                             dev_time = as.numeric(ymd(dev1_d) - ymd(start10))/365.25,
+                             bhd_time = as.numeric(ymd(bhd1_d) - ymd(start10))/365.25)
+
+
+```
+
+<br>
+
+
+
+##  Data setup 
+
+```{r Unnatural Death: Data setup} 
+
+##  Exclude unknown sex & non-linked individuals 
+dd_wide = dd_wide %>% filter(sex!="Unspecified" & linked==1) 
+
+
+##  Exposures and their timing (FU time in years)
+##  Mental disorders, SH method
+
+#   Categories of SH method
+mn = names(table(dd_wide$eEvent_sh1))
+methodx = mn[c(3,4,5,6,11)]   # More lethal SH methods
+
+#   Window for MD/HIV diagnoses after SH event
+dx = 7 
+
+##  Outcome: Unnatural death (UD)
+dd_wide = dd_wide %>% mutate(U.death_y = 1*(cause=="Unnatural causes"))
+
+
+##  Completed suicides 
+#   Fixed window for completed suicide (UD after ISH event)
+##  Death same day
+dd_sui0 = dd_wide %>% filter(!is.na(eSdate_sh1) & 
+                                   (U.death_y == 1) & 
+                                   (end == eSdate_sh1)) 
+id_sui0 = dd_sui0$id 
+
+##  Death in hospital within the same admission
+dd_sui1 = dd_wide %>% filter(!is.na(eSdate_sh1) & 
+                              (U.death_y==1) & 
+                              (end>=eSdate_sh1+1 &
+                               end<=eSdate_sh1+30)) %>%
+          mutate(fup = end-eSdate_sh1) %>%
+          select(id, eSource_sh1, eSdate_sh1, end, fup)
+
+##  Reviewed claims data: deaths during hospitalization for the index SH
+
+id_sui1 = c("AfAc000001", "AfAc000002", "AfAc000003")
+
+
+id_sui = c(id_sui0, id_sui1)
+
+dd_wide = dd_wide %>% mutate(completed_sui = 1*(id %in% id_sui))   
+nSH_UDx = sum(dd_wide$completed_sui)
+
+
+##  Age, HIV, MHD diagnoses @ ISH event
+dd_wide = dd_wide %>% mutate(SH_grp = 1*(!is.na(eSdate_sh1) & completed_sui == 0),
+                             end_sh = as.Date(ifelse(completed_sui == 1, eSdate_sh1, end))) %>% 
+                      # Completed suicides: FUT ends at SH event 
+                      mutate(FU_time_sui = as.numeric(ymd(end_sh) - ymd(start10))/365.25) %>%  
+                      mutate(SH_age = as.numeric(ymd(eSdate_sh1) - ymd(birth_d))/365.25,
+                             SH_hiv = ifelse(!is.na(SH_time - hiv_time) & (hiv_time <= SH_time + dx), 1, 0),
+                             SH_md = ifelse(!is.na(eSdate_sh1)  & md1_y ==1 & md1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_org = ifelse(!is.na(eSdate_sh1) & org1_y==1 & org1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_su  = ifelse(!is.na(eSdate_sh1) & su1_y==1  & su1_d <=(eSdate_sh1+dx), 1, 0),
+                             SH_psy = ifelse(!is.na(eSdate_sh1) & psy1_y==1 & psy1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_bp  = ifelse(!is.na(eSdate_sh1) & bp1_y==1  & bp1_d <=(eSdate_sh1+dx), 1, 0),
+                             SH_dep = ifelse(!is.na(eSdate_sh1) & dep1_y==1 & dep1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_anx = ifelse(!is.na(eSdate_sh1) & anx1_y==1 & anx1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_per = ifelse(!is.na(eSdate_sh1) & per1_y==1 & per1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_oth = ifelse(!is.na(eSdate_sh1) & oth1_y==1 & oth1_d<=(eSdate_sh1+dx), 1, 0),           
+                             SH_bhs = ifelse(!is.na(eSdate_sh1) & bhs1_y==1 & bhs1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_int = ifelse(!is.na(eSdate_sh1) & int1_y==1 & int1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_dev = ifelse(!is.na(eSdate_sh1) & dev1_y==1 & dev1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_bhd = ifelse(!is.na(eSdate_sh1) & bhd1_y==1 & bhd1_d<=(eSdate_sh1+dx), 1, 0),
+                             SH_method = case_when(eEvent_sh1 %in% methodx ~ "More_lethal", 
+                                                                      TRUE ~ "Less_lethal")) %>%
+                      mutate(SH_age_cat = cut(SH_age, c(5*(2:5), 5+10*(3:6), 100), right=FALSE), 
+                             SH_age_cat3 = cut(SH_age, c(10,35,55,100), right=FALSE), 
+                             SH_age_cat4 = cut(SH_age, c(10,15,25,40,100), right=FALSE),
+                             SH_su.psy.per = 1*(SH_su==1|SH_psy==1|SH_per==1),
+                             SH_method = ifelse(is.na(eSdate_sh1), NA, SH_method),
+                             FU_time_afterSH = FU_time_sui - SH_time) %>% 
+                      mutate(SH_method3 = ifelse(SH_grp == 0, "No SH", SH_method),
+                             U.death_cr = case_when(cause=="No death" ~ 0,
+                                                    cause=="Unnatural causes" ~ 1,  
+                                                    #| cause=="Under investigation" ~ 1 # Sensitivity
+                                                    cause=="Unknown" | cause=="Under investigation" ~ 2,
+                                                    cause=="Natural causes"~ 3),
+                             U.death_cr5 = case_when(cause=="No death" ~ 0,
+                                                     cause=="Unnatural causes" ~ 1,
+                                                     cause=="Under investigation" ~ 2,
+                                                     cause=="Unknown" ~ 3,
+                                                     cause=="Natural causes"~ 4))
+
+
+dd_wide$sex = as.factor(as.character(dd_wide$sex))
+
+dd_wide$SH_method3 = relevel(as.factor(dd_wide$SH_method3), ref = "No SH")
+dd_wide$SH_method = relevel(as.factor(dd_wide$SH_method),  ref = "Less_lethal")
+
+s.SH_age = round(summary(dd_wide$SH_age),1)
+s.FU_SH = round(summary(dd_wide$FU_time_afterSH),1)
+s.FU_SH
+
+## Nr. of ISH and following UD
+nSH = sum(!is.na(dd_wide$eSdate_sh1))
+nSH_UD = sum(!is.na(dd_wide$eSdate_sh1) & (dd_wide$U.death_y==1))
+nSH; nSH_UD;
+
+## Review of UD shortly after ISH
+nSH_UDx7 = sum(dd_wide$completed_sui)
+nSH_UDx1 = sum(!is.na(dd_wide$eSdate_sh1) & (dd_wide$U.death_y==1) & (dd_wide$end<=dd_wide$eSdate_sh1+1)) 
+
+for (i in c(0,1,3,5,7)) print(paste("Day", i, "after index ISH:", 
+                                    sum(!is.na(dd_wide$eSdate_sh1) & 
+                                          (dd_wide$U.death_y==1) & 
+                                          (dd_wide$end<=dd_wide$eSdate_sh1+i)), 
+                                    "UD"))
+
+## ISH Group size
+nSH_nf = sum(dd_wide$SH_grp)
+
+##  Nr of UD in ISH group
+nSH_nf_UD = sum(dd_wide$SH_grp==1 & dd_wide$U.death_y==1)
+#nSH_nf; nSH_nf_UD
+
+##  Deaths among more_lethal SH grp
+dd_x = dd_wide %>% filter(SH_method == "More_lethal" & U.death_y==1 & completed_sui == 0) %>%
+          mutate(fup = end-eSdate_sh1) %>%
+          select(id, SH_method, sex, eSdate_sh1, end, fup)
+#dd_x
+
+```
+
+
+
+After excluding people with unknown sex and unlinked people, there were `rnSH ` intentional self-harm events, followed by `r nSH_UD` unnatural deaths. Of these, `r nSH_UDx ` occurred during the hospital stay  for the index ISH event and were hence considered completed suicides (in the non-ISH group).
+
+
+##  Incidence of UD ~ age & sex  
+
+```{r, UD: RP survival models by sex, eval=saveCoefs}
+
+###  Independent models for males/females with splines  
+df = 4
+
+dd_wide = dd_wide %>% mutate(tstart = age_start,
+                             tstop = age_end)
+
+
+##  Males 
+dd = dd_wide %>% filter(sex=="Male") %>% 
+                 filter (tstop-tstart>0)
+
+mod_sreg_m = stpm2(Surv(tstart, tstop, U.death_y) ~ 1, df = df,
+                   data = dd,  
+                   control = list(optimiser="BFGS"))
+
+##  Females
+dd = dd_wide %>% filter(sex=="Female") %>% 
+                 filter (tstop-tstart>0)
+
+mod_sreg_f = stpm2(Surv(tstart, tstop, U.death_y) ~ 1, df = df,
+                   data = dd,  
+                   control = list(optimiser="BFGS"))
+
+
+
+##  Calculate incidence rates (2 models)
+incidence_data = data.frame(
+  tstart = 10,
+  tstop = seq(10, 75, length = 100),
+  sex = "Male"
+  )
+IR_pred = round(10^5*predict(mod_sreg_m, newdata = incidence_data, type = "hazard", se.fit = TRUE), 2)
+incidence_data = incidence_data %>% 
+                    mutate(age = tstop,
+                           IR_100K = IR_pred[,1],
+                           lower_ci = IR_pred[,2],
+                           upper_ci = IR_pred[,3]) %>%
+                    filter(!is.na(IR_100K)) %>%
+                    filter(upper_ci<=2000)
+incidence_datax = incidence_data 
+
+
+incidence_data = data.frame(
+  tstart = 10,
+  tstop = seq(10, 75, length = 100),
+  sex = "Female"
+  )
+IR_pred = round(10^5*predict(mod_sreg_f, newdata = incidence_data, type = "hazard", se.fit = TRUE), 2)
+incidence_data = incidence_data %>% 
+                    mutate(age = tstop,
+                           IR_100K = IR_pred[,1],
+                           lower_ci = IR_pred[,2],
+                           upper_ci = IR_pred[,3]) %>%
+                    filter(!is.na(IR_100K)) %>%
+                    filter(upper_ci<=2000)
+incidence_datax = rbind(incidence_datax, incidence_data)
+ 
+setwd(path_results)
+write.csv(incidence_datax, "IncidenceUD/RPmodel_UDincidence_sex.csv") 
+
+
+```
+
+```{r, UD: IR ~ age, sex - Figure, fig.width=10, fig.height=7}
+
+Export = 1*saveCoefs
+
+##  Figure Export
+colx = c("red3","dodgerblue3")
+a = 0.2; b = 0.1 
+cf = colx[1]; cx = grDevices::col2rgb(cf)/255; cif = rgb(cx[1],cx[2],cx[3], alpha = a)
+cm = colx[2]; cx = grDevices::col2rgb(cm)/255; cim = rgb(cx[1],cx[2],cx[3], alpha = a)
+
+##  Read incidence data
+setwd(path_results)
+incidence_datax = read.csv("IncidenceUD/RPmodel_UDincidence_sex.csv")
+
+##  Subgroup incidence rates data
+dd_incm = incidence_datax %>% filter(sex=="Male")
+dd_incf = incidence_datax %>% filter(sex=="Female")
+L = 2; cx=1.2
+
+
+if (Export==1){
+  setwd(path_figures)
+  png("paper1/Fig_IR_UD_age.png", width = 1200, height = 700, res = 100)
+  L = 3; cx = 1.6
+}
+
+par(cex=cx)
+par(mar = c(5,4,1,1))  
+
+plot(incidence_datax$age, incidence_datax$IR_100K, pch="", 
+     main = "",  
+     xlim=c(10,75), ylim = c(0, 155),  
+     xlab="Age (years)", ylab="Incidence rate (per 100'000 person-years)")
+polygon(x=c(dd_incf$age, rev(dd_incf$age)), 
+        y=c(dd_incf$lower_ci, rev(dd_incf$upper_ci)),  
+        col = cif, border = FALSE)
+polygon(x=c(dd_incm$age, rev(dd_incm$age)), 
+        y=c(dd_incm$lower_ci,rev(dd_incm$upper_ci)),  
+        col = cim, border = FALSE)
+abline(h=25*(0:10), lwd=c(2,1), col="grey80")
+lines(dd_incf$age, dd_incf$IR_100K, col=cf, lwd=L)
+lines(dd_incm$age, dd_incm$IR_100K, col=cm, lwd=L)
+legend("topleft", c("Female", "Male"), 
+                   lty=1, lwd=L, col=colx) 
+
+
+if (Export==1) dev.off()
+
+```
+
+
+
+##  Cause-specific cumulative incidence ~ sex, SH 
+
+```{r UD (with CR): Data split at SH - CR5}
+
+##    Outcome y: U.death_cr5 (#1 UD, 2 UI, 3 UK, 4 ND) 
+##    FU time: FU_time_sui
+##    SH method (3): no sh, less lethal, highly lethal
+
+##  Define tmerge outcome
+dd_ud = tmerge(data1=dd_wide, data2=dd_wide, id=id, y=event(FU_time_sui, U.death_cr5))    
+
+##  Split time at SH 
+dd_ud_new = tmerge(data1=dd_ud, data2=dd_ud, id=id, SH=tdc(SH_time))
+
+
+```
+
+
+
+#### CS cumulative incidence of UD / UK / ND 
+#### Stratified by self-harm encounter and sex 
+
+
+```{r CS-CIF UD models ~ SH | sex}
+
+# y: 0 alive, 1 UD, 2 UI, 3 UK, 4 ND
+
+#  Females
+dd = data.frame(dd_ud_new) %>% filter(sex=="Female") %>%
+                               mutate(FU_time = round((tstop - tstart),2),
+                                      y = as.factor(y)) %>% 
+                               select(id, FU_time, SH, y)
+
+fit.f = tidycmprsk::cuminc(Surv(FU_time, y) ~  SH, data =  dd) 
+
+#  Males
+dd = data.frame(dd_ud_new) %>% filter(sex=="Male") %>%
+                               mutate(FU_time = round((tstop - tstart),2),
+                                      y = as.factor(y)) %>% 
+                               select(id, FU_time, SH, y)
+
+fit.m = tidycmprsk::cuminc(Surv(FU_time, y) ~  SH, data =  dd) 
+
+
+```
+
+
+```{r fig.cap="Aalen-Johansen estimate of cumulative incidence functions for competing causes of death (UD/UI/UK/ND) among individuals with and without SH event, stratified by sex.", fig.width = 10, fig.height = 9, eval=FALSE} 
+
+# y: 0 alive, 1 UD, 2 UI, 3 UK, 4 ND
+
+
+Export = 1*saveFigures
+
+Percent = TRUE
+
+if (Export==1){
+  setwd(path_figures)
+  png("CS-CIF_UD/CS-CIF_allD_4causes.png", width = 1300, height = 1300, res = 150)
+}
+
+
+per = 1 + 99*(Percent==TRUE)
+xx = 5 #4.1
+yy = 0.085*per  
+
+par(mfrow=c(2,2), cex=1.2)  
+
+colx = c("pink","palevioletred1","red1","red3")
+
+# Female, SH=0
+fit = fit.f$tidy[fit.f$tidy$strata==0,]
+fit$estimate = per*fit$estimate
+ time = fit$time[fit$outcome=="3"]; timeL = length(time)
+ cause1_prob = fit$estimate[fit$outcome=="1"]      
+ cause2_prob = fit$estimate[fit$outcome=="2"]             
+ cause3_prob = fit$estimate[fit$outcome=="3"]   
+ cause4_prob = fit$estimate[fit$outcome=="4"]  
+
+par(mar=c(2,4.5,4,1))   
+plot(time, cause2_prob, pch="", xlim = c(0,xx), ylim = c(0,yy), 
+     xlab = "", # "Time since study entry (years)", 
+     ylab = "Cumulative incidence (stacked) in %",
+     main = "Without Self-harm") 
+polygon(x = c(time, rev(time)), 
+        y = c(rep(0,timeL), rev(cause1_prob)), # UD
+        col = colx[4], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob, rev(cause1_prob+cause2_prob)), # unknown
+        col = colx[3], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob)), # ND
+        col = colx[2], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob+cause3_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob+cause4_prob)), # ND
+        col = colx[1], border = FALSE)
+abline(h=0.01*(0:10)*per, lwd=c(2,1), col="grey80")
+legend("topleft", fill=colx, title=" Cause of death (Female) ", cex=0.9,
+       legend=c("Natural cause",
+                "Unknown cause",
+                "Under investigation",
+                "Unnatural cause"))
+
+# Female, SH=1
+fit = fit.f$tidy[fit.f$tidy$strata==1,]
+fit = fit[!is.na(fit$estimate), ]
+fit$estimate = per*fit$estimate
+ time = fit$time[fit$outcome=="3"]; timeL = length(time)
+ cause1_prob = fit$estimate[fit$outcome=="1"]      
+ cause2_prob = fit$estimate[fit$outcome=="2"]             
+ cause3_prob = fit$estimate[fit$outcome=="3"]   
+ cause4_prob = fit$estimate[fit$outcome=="4"]     
+
+par(mar=c(2,2.5,4,3))  
+plot(time, cause2_prob, pch="", xlim = c(0,xx), ylim = c(0,yy), 
+     xlab = "", # "Time since self-harm event (years)", 
+     ylab = "", # "Cumulative incidence (stacked)",
+     main = "After Self-harm") 
+polygon(x = c(time, rev(time)), 
+        y = c(rep(0,timeL), rev(cause1_prob)), # UD
+        col = colx[4], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob, rev(cause1_prob+cause2_prob)), # unknown
+        col = colx[3], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob)), # ND
+        col = colx[2], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob+cause3_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob+cause4_prob)), # ND
+        col = colx[1], border = FALSE)
+abline(h=0.01*(0:10)*per,lwd=c(2,1), col="grey80")
+
+
+
+colx = c("lightblue","steelblue1","steelblue","blue")
+
+# Male, SH=0
+fit = fit.m$tidy[fit.m$tidy$strata==0,]
+fit$estimate = per*fit$estimate
+ time = fit$time[fit$outcome=="3"]; timeL = length(time)
+ cause1_prob = fit$estimate[fit$outcome=="1"]      
+ cause2_prob = fit$estimate[fit$outcome=="2"]             
+ cause3_prob = fit$estimate[fit$outcome=="3"]   
+ cause4_prob = fit$estimate[fit$outcome=="4"]      
+
+par(mar=c(5,4.5,1,1))  
+plot(time, cause2_prob, pch="", xlim = c(0,xx), ylim = c(0,yy), 
+     xlab = "Years since study entry", 
+     ylab = "Cumulative incidence (stacked) in %",
+     main = "") # "Men without Self-harm event") 
+polygon(x = c(time, rev(time)), 
+        y = c(rep(0,timeL), rev(cause1_prob)), # UD
+        col = colx[4], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob, rev(cause1_prob+cause2_prob)), # unknown
+        col = colx[3], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob)), # ND
+        col = colx[2], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob+cause3_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob+cause4_prob)), # ND
+        col = colx[1], border = FALSE)
+abline(h=0.01*(0:10)*per, lwd=c(2,1), col="grey80")
+legend("topleft", fill=colx, title=" Cause of death (Male)   ",cex=0.9,
+       legend=c("Natural cause",
+                "Unknown cause",
+                "Under investigation",
+                "Unnatural cause"))
+
+# Male, SH=1
+fit = fit.m$tidy[fit.m$tidy$strata==1,]
+fit = fit[!is.na(fit$estimate), ]
+fit$estimate = per*fit$estimate
+ time = fit$time[fit$outcome=="3"]; timeL = length(time)
+ cause1_prob = fit$estimate[fit$outcome=="1"]      
+ cause2_prob = fit$estimate[fit$outcome=="2"]             
+ cause3_prob = fit$estimate[fit$outcome=="3"]   
+ cause4_prob = fit$estimate[fit$outcome=="4"]
+  
+par(mar=c(5,2.5,1,3))
+plot(time, cause2_prob, pch="", xlim = c(0,xx), ylim = c(0,yy), 
+     xlab = "Years since index self-harm encounter", 
+     ylab = "", # "Cumulative incidence (stacked)",
+     main = "") # "Men with Self-harm event") 
+polygon(x = c(time, rev(time)), 
+        y = c(rep(0,timeL), rev(cause1_prob)), # UD
+        col = colx[4], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob, rev(cause1_prob+cause2_prob)), # unknown
+        col = colx[3], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob)), # ND
+        col = colx[2], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob+cause3_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob+cause4_prob)), # ND
+        col = colx[1], border = FALSE)
+abline(h=0.01*(0:10)*per, lwd=c(2,1), col="grey80")
+
+if (Export==1) dev.off()
+
+```
+
+```{r fig.cap="Aalen-Johansen estimate of cumulative incidence functions for competing causes of death (UD/UK/ND) among individuals with and without SH event, stratified by sex. ", fig.width = 10, fig.height = 10} 
+
+# outcome: 0 alive, 1 UD, 2UK, 3 ND
+
+
+Export = 1*saveFigures
+Percent = TRUE
+
+if (Export==1){
+  setwd(path_figures)
+  png("CS-CIF_UD/CS-CIF_allD_3causes.png", width = 1300, height = 1300, res = 150)
+}
+
+
+
+per = 1 + 99*(Percent==TRUE)
+xx = 5 #4.1
+yy = 0.09*per 
+cx = 1.2
+
+par(mfrow=c(2,2), oma=c(0,3,0,0), cex=cx)  
+
+
+colx = c("pink","palevioletred1","red3")
+
+# Female, SH=0
+fit = fit.f$tidy[fit.f$tidy$strata==0,]
+fit$estimate = per*fit$estimate
+ time = fit$time[fit$outcome=="3"]; timeL = length(time)
+ cause1_prob = fit$estimate[fit$outcome=="1"]      
+ cause2_prob = fit$estimate[fit$outcome=="2"] + fit$estimate[fit$outcome=="3"]   
+ cause3_prob = fit$estimate[fit$outcome=="4"]
+
+ 
+par(mar=c(2,1.5,4,1.5)) 
+plot(time, cause2_prob, pch="", xlim = c(0,xx), ylim = c(0,yy), 
+     xlab = "", # "Time since study entry (years)", 
+     ylab = "",  #"Cumulative incidence (stacked) in %",
+     main = "Without NF-ISH event") 
+polygon(x = c(time, rev(time)), 
+        y = c(rep(0,timeL), rev(cause1_prob)), # UD
+        col = colx[3], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob, rev(cause1_prob+cause2_prob)), # unknown
+        col = colx[2], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob)), # ND
+        col = colx[1], border = FALSE)
+abline(h=0.02*(0:10)*per, lwd=1, col="grey80")
+legend("topleft", fill=colx, title=" Cause of death (Female) ",cex=0.9,
+       legend=c("Natural cause",
+                "Unknown cause",
+                "Unnatural cause"))
+
+
+# Female, SH=1
+fit = fit.f$tidy[fit.f$tidy$strata==1,]
+fit = fit[!is.na(fit$estimate), ]
+fit$estimate = per*fit$estimate
+ time = fit$time[fit$outcome=="3"]; timeL = length(time)
+ cause1_prob = fit$estimate[fit$outcome=="1"]      
+ cause2_prob = fit$estimate[fit$outcome=="2"] + fit$estimate[fit$outcome=="3"]   
+ cause3_prob = fit$estimate[fit$outcome=="4"]                
+       
+
+#par(mar=c(2,2.5,4,3)) 
+par(mar=c(2,1.5,4,1.5)) 
+plot(time, cause2_prob, pch="", xlim = c(0,xx), ylim = c(0,yy), 
+     xlab = "", # "Time since self-harm event (years)", 
+     ylab = "", # "Cumulative incidence (stacked)",
+     main = "After NF-ISH event") 
+polygon(x = c(time, rev(time)), 
+        y = c(rep(0,timeL), rev(cause1_prob)), # UD
+        col = colx[3], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob, rev(cause1_prob+cause2_prob)), # unknown
+        col = colx[2], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob)), # ND
+        col = colx[1], border = FALSE)
+abline(h=0.02*(0:10)*per, lwd=1, col="grey80")
+
+
+colx = c("lightblue","steelblue","blue")
+
+# Male, SH=0
+fit = fit.m$tidy[fit.m$tidy$strata==0,]
+fit$estimate = per*fit$estimate
+ time = fit$time[fit$outcome=="3"]; timeL = length(time)
+ cause1_prob = fit$estimate[fit$outcome=="1"]      
+ cause2_prob = fit$estimate[fit$outcome=="2"] + fit$estimate[fit$outcome=="3"]   
+ cause3_prob = fit$estimate[fit$outcome=="4"]        
+
+ 
+par(mar=c(5,1.5,1,1.5)) 
+plot(time, cause2_prob, pch="", xlim = c(0,xx), ylim = c(0,yy), 
+     xlab = "Years since study entry", 
+     ylab = "", #"Cumulative incidence (stacked) in %",
+     main = "") # "Men without Self-harm event") 
+polygon(x = c(time, rev(time)), 
+        y = c(rep(0,timeL), rev(cause1_prob)), # UD
+        col = colx[3], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob, rev(cause1_prob+cause2_prob)), # unknown
+        col = colx[2], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob)), # ND
+        col = colx[1], border = FALSE)
+abline(h=0.02*(0:10)*per, lwd=1, col="grey80")
+legend("topleft", fill=colx, title=" Cause of death (Male)   ",cex=0.9,
+       legend=c("Natural cause",
+                "Unknown cause",
+                "Unnatural cause"))
+
+# Male, SH=1
+fit = fit.m$tidy[fit.m$tidy$strata==1,]
+fit = fit[!is.na(fit$estimate), ]
+fit$estimate = per*fit$estimate
+ time = fit$time[fit$outcome=="3"]; timeL = length(time)
+ cause1_prob = fit$estimate[fit$outcome=="1"]      
+ cause2_prob = fit$estimate[fit$outcome=="2"] + fit$estimate[fit$outcome=="3"]   
+ cause3_prob = fit$estimate[fit$outcome=="4"]   
+  
+par(mar=c(5,1.5,1,1.5))
+plot(time, cause2_prob, pch="", xlim = c(0,xx), ylim = c(0,yy), 
+     xlab = "Years since index self-harm event", 
+     ylab = "", # "Cumulative incidence (stacked)",
+     main = "") # "Men with Self-harm event") 
+polygon(x = c(time, rev(time)), 
+        y = c(rep(0,timeL), rev(cause1_prob)), # UD
+        col = colx[3], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob, rev(cause1_prob+cause2_prob)), # unknown
+        col = colx[2], border = FALSE)
+polygon(x = c(time, rev(time)), 
+        y = c(cause1_prob+cause2_prob,
+              rev(cause1_prob+cause2_prob+cause3_prob)), # ND
+        col = colx[1], border = FALSE)
+abline(h=0.02*(0:10)*per, lwd=1, col="grey80")
+
+# Add a common x-axis label and common title
+mtext("Cumulative incidence (stacked) in %", side=2, outer=TRUE, line=1, cex=cx)
+
+if (Export==1) dev.off()
+
+```
+
+
+
+
+###  CS cumulative incidence of UD ~ sex, SH 
+
+#### Cause-specific cumulative incidence of death from unnatural causes 
+#### Competing risks: other types of death 
+#### Stratified by self-harm event and sex 
+
+
+
+```{r UD (with CR): SHm and age at start}
+
+# ##    Outcome y: U.death_cr (1 UD, 2 ND..) 
+# ##    FU time: FU_time_sui
+# ##    SH method (3): no sh, more, less lethal
+# 
+# ##  Define tmerge outcome
+# dd_ud = tmerge(data1=dd_wide, data2=dd_wide, id=id, y=event(FU_time_sui, U.death_cr)) 
+# 
+# ##  Split time at SH
+# dd_ud_new = tmerge(data1=dd_ud, data2=dd_ud, id=id, SH=tdc(SH_time))
+
+
+##  SH  method
+dd_ud_new = dd_ud_new %>% 
+  mutate(SH_method3 = as.factor(ifelse(SH==0, "No SH", as.character(SH_method3))))
+dd_ud_new$SH_method3 = relevel(as.factor(dd_ud_new$SH_method3), ref = "No SH")
+
+##  Age at tstart
+dd_ud_new = dd_ud_new %>% mutate(age_start = tstart + age_start10,
+                                 age_end = tstop + age_start10)
+
+```
+
+ 
+```{r UD: CS cumulative incidence + CI ~ sex and SH }
+
+##  CS-Cumulative incidence (UD): by sex and SH event
+
+#  Females
+dd = data.frame(dd_ud_new) %>% filter(sex=="Female") %>%
+                               mutate(FU_time = round((tstop - tstart),2),
+                                      y = as.factor(y)) %>% 
+                               select(id, FU_time, SH, y)
+
+fit.f = tidycmprsk::cuminc(Surv(FU_time, y) ~  SH, data =  dd) 
+  fit = fit.f$tidy 
+    sh=0
+    fit_f0 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=1
+    fit_f1 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+
+    
+##  Males     
+dd = data.frame(dd_ud_new) %>% filter(sex=="Male") %>%
+                               mutate(FU_time = round((tstop - tstart),2),
+                                      y = as.factor(y)) %>% 
+                               select(id, FU_time, SH, y)
+
+fit.m = tidycmprsk::cuminc(Surv(FU_time, y) ~  SH, data =  dd) 
+  fit = fit.m$tidy
+    sh=0
+    fit_m0 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=1
+    fit_m1 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    
+
+##  All     
+dd = data.frame(dd_ud_new) %>% mutate(FU_time = round((tstop - tstart),2),
+                                      y = as.factor(y)) %>% 
+                               select(id, FU_time, SH, y)
+
+fit.all = tidycmprsk::cuminc(Surv(FU_time, y) ~  SH, data =  dd) 
+  fit = fit.all$tidy
+    sh=0
+    fit_a0 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=1
+    fit_a1 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    
+```
+
+
+```{r CIF for UD ~ sex + SH: Figure, fig.width = 12, fig.height = 7, eval=FALSE}
+
+Export = 1*saveFigures
+panelA = 1  # Add label A
+
+width_cm = 18   
+height_cm = width_cm*(2/3)
+dpi = 300
+
+
+colx = c("lightsalmon","red3","steelblue1","dodgerblue3")
+
+a = 0.2; b = 0.1 
+cf = colx[1]; cx = grDevices::col2rgb(cf)/255; cif0 = rgb(cx[1],cx[2],cx[3], alpha = 2*a)
+cf = colx[2]; cx = grDevices::col2rgb(cf)/255; cif1 = rgb(cx[1],cx[2],cx[3], alpha = a)
+cm = colx[3]; cx = grDevices::col2rgb(cm)/255; cim0 = rgb(cx[1],cx[2],cx[3], alpha = 2*a)
+cm = colx[4]; cx = grDevices::col2rgb(cm)/255; cim1 = rgb(cx[1],cx[2],cx[3], alpha = a)
+
+leg = NA
+leg[1] = paste0("No prior NF-SH") 
+leg[2] = paste0("After NF-SH") 
+
+yL = 5.2
+xL = 5
+cx = 1.2
+par(cex=cx); L=2
+
+if (Export==1){
+setwd(path_figures)
+if (panelA==1){
+  png("paper1/Figure3_CIF_SH_A.png", width = 1200, height = 800, res = 100)
+   # png("paper1/HQ/Figure3A_HQ.png",
+   #     width = (width_cm / 2.54) * dpi,
+   #     height = (height_cm / 2.54) * dpi,
+   #     res = dpi)
+  }else{
+  png("paper1/Figure3_CIF_SH.png", width = 1200, height = 700, res = 100)
+}
+  L = 2; cx = .95
+}
+
+par(mfrow=c(1,2))
+if (panelA==1){
+  par(oma=c(3,0,2,0)) 
+  }else{
+    par(oma=c(3,0,0,0)) 
+  }
+
+par(mar=c(2,4,3,0), cex=cx)
+
+
+plot(fit_f0$time, fit_f0$CIF, pch="", xlim = c(0,xL), ylim = c(0,yL), 
+     xlab = "", #Years since study entry or age group change",
+     ylab = "Cumulative  incidence  (%)",
+     main = "Female") 
+polygon(x=c(fit_f1$time,  rev(fit_f1$time)), 
+        y=c(fit_f1$CIlow, rev(fit_f1$CIhi)),  
+        col = cif1, border = FALSE)
+polygon(x=c(fit_f0$time,  rev(fit_f0$time)), 
+        y=c(fit_f0$CIlow, rev(fit_f0$CIhi)),  
+        col = cif0, border = FALSE)
+abline(h=(0:10), lwd=c(2,1), col="grey80")
+lines(fit_f0$time, fit_f0$CIF, col=colx[1], lwd=L)
+lines(fit_f1$time, fit_f1$CIF, col=colx[2], lwd=L)
+legend("topleft", leg[2:1], lwd=L, col=colx[2:1],cex=.95) 
+
+par(mar=c(2,3,3,1))
+plot(fit_m0$time, fit_m0$CIF, pch="", xlim = c(0,xL), ylim = c(0,yL), 
+     xlab = "", #Years since study entry or age group change",
+     ylab = "", #Cumulative  incidence  (%)",
+     main = "Male") 
+polygon(x=c(fit_m1$time,  rev(fit_m1$time)), 
+        y=c(fit_m1$CIlow, rev(fit_m1$CIhi)),  
+        col = cim1, border = FALSE)
+polygon(x=c(fit_m0$time,  rev(fit_m0$time)), 
+        y=c(fit_m0$CIlow, rev(fit_m0$CIhi)),  
+        col = cim0, border = FALSE)
+abline(h=(0:10), lwd=c(2,1), col="grey80")
+lines(fit_m0$time, fit_m0$CIF, col=colx[3], lwd=L)
+lines(fit_m1$time, fit_m1$CIF, col=colx[4], lwd=L)
+legend("topleft", leg[2:1], lwd=L, col=colx[4:3], cex=.95)
+
+# Add a common x-axis label and common title
+mtext("Years since study entry or index NF-SH encounter", side=1, outer=TRUE, line=1, cex=cx)
+if (panelA==1){
+  mtext(" A", side=3, outer=TRUE, line=1, font=par("font.main"), cex=cx*par("cex.main"), adj=0)
+}
+
+if (Export==1) dev.off()
+
+```
+
+
+###  Time-varying HR for SH (RP flex par model): Sensitivity analysis
+
+```{r UD ~ sex + SH : 2 par flex models, eval=runSensitivity}
+
+
+ddd = data.frame(dd_ud_new) %>% 
+            mutate(FU_time = tstop - tstart, 
+                   death_other = 1*(y==2 | y==3),
+                   U.death_y = 1*(y==1)) %>% 
+            filter(FU_time>0)
+
+
+###  Independent RP models for males/females for UD 
+df = 3      # baseline hazard
+df_tvc = 2  # time-varying HR
+
+
+###  2 models
+##  Males
+dd = ddd %>% filter(sex=="Male") 
+mod_sreg_m_ud = stpm2(Surv(FU_time, U.death_y) ~ SH + ns(age_start, df = 3), 
+                      df = df,
+                      data = dd,
+                      tvc = list(SH = df_tvc),
+                      control = list(optimiser="BFGS"))
+
+
+##  Females
+dd = ddd %>% filter(sex=="Female")
+mod_sreg_f_ud = stpm2(Surv(FU_time, U.death_y) ~ SH + ns(age_start, df = 3), 
+                      df = df,
+                      data = dd,
+                      tvc = list(SH = df_tvc),
+                      control = list(optimiser="BFGS"))
+
+```
+
+```{r Plot HR ~ time 2 models, fig.width = 8, fig.height = 6, eval=runSensitivity} 
+
+Export = 1*saveFigures
+
+colx = c("red3","dodgerblue3")
+a = 0.2; b = 0.1 
+cf = colx[1]; cx = grDevices::col2rgb(cf)/255; cif = rgb(cx[1],cx[2],cx[3], alpha = a)
+cm = colx[2]; cx = grDevices::col2rgb(cm)/255; cim = rgb(cx[1],cx[2],cx[3], alpha = a)
+
+if (Export==1){
+  setwd(path_figures)
+  png("paper1/HR_SH_flex32_age_CI.png", width = 1000, height = 800, res = 100)
+}
+
+newdata = data.frame(SH=0, age_start=35)
+
+## Plot HR for SH + CI
+
+par(cex=1.6)
+plot(mod_sreg_f_ud, newdata=newdata, type="hr", var="SH", rug = FALSE,
+     ci.col=cif, xlim = c(0,5), ylim=c(0,25), 
+     xlab = "Years since study entry or index NF-SH encounter", 
+     ylab = "Hazard ratio for NF-SH encounter")
+abline(h=1,lty=2) 
+lines(mod_sreg_m_ud, newdata=newdata, type="hr", var="SH", ci.col=cim, lty=2, ci=TRUE)
+lines(mod_sreg_m_ud, newdata=newdata, type="hr", var="SH", lwd=3, col=colx[2])
+lines(mod_sreg_f_ud, newdata=newdata, type="hr", var="SH", lwd=3, col=colx[1])
+legend("topright", legend=c("Female","Male"), lwd=2, col=colx, cex=0.95)
+
+if (Export==1) dev.off()
+
+```
+
+
+
+
+##  Cumulative incidence of UD ~ sex, SH method 
+
+```{r UD: CS-Cumulative incidence by sex and SH method }
+
+##  CS-Cumulative incidence (UD): by sex and SH method
+SHL = levels(dd_ud_new$SH_method3)
+
+#  Females
+dd = data.frame(dd_ud_new) %>% filter(sex=="Female") %>%
+                               mutate(FU_time = round((tstop - tstart),2),
+                                      y = as.factor(y)) %>% 
+                               select(id, FU_time, SH, SH_method3, y)
+
+fit.f = tidycmprsk::cuminc(Surv(FU_time, y) ~  SH_method3, data =  dd) 
+  fit = fit.f$tidy 
+    sh=SHL[1]
+    fit_f0 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=SHL[2]
+    fit_f1 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=SHL[3]
+    fit_f2 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+
+    
+##  Males     
+dd = data.frame(dd_ud_new) %>% filter(sex=="Male") %>%
+                               mutate(FU_time = round((tstop - tstart),2),
+                                      y = as.factor(y)) %>% 
+                               select(id, FU_time, SH, SH_method3, y)
+
+fit.m = tidycmprsk::cuminc(Surv(FU_time, y) ~  SH_method3, data =  dd) 
+  fit = fit.m$tidy
+    sh=SHL[1]
+    fit_m0 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=SHL[2]
+    fit_m1 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=SHL[3]
+    fit_m2 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+
+    
+    
+##  All    
+dd = data.frame(dd_ud_new) %>% mutate(FU_time = round((tstop - tstart),2),
+                                      y = as.factor(y)) %>% 
+                               select(id, FU_time, SH, SH_method3, y)
+
+fit.all = tidycmprsk::cuminc(Surv(FU_time, y) ~  SH_method3, data =  dd) 
+  fit = fit.all$tidy
+    sh=SHL[1]
+    fit_a0 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=SHL[2]
+    fit_a1 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+    sh=SHL[3]
+    fit_a2 = data.frame(
+      time = fit$time[fit$outcome==1 & fit$strata==sh],
+      CIF = 100*fit$estimate[fit$outcome==1 & fit$strata==sh],
+      CIlow = 100*fit$conf.low[fit$outcome==1 & fit$strata==sh],
+      CIhi = 100*fit$conf.high[fit$outcome==1 & fit$strata==sh]
+      ) %>% filter(!is.na(CIlow) & !is.na(CIhi))
+
+
+    
+##   TABLE : CIF at 1-5 yrs
+    
+CI_UD = data.frame(matrix(NA,9,5))
+
+fitF = list(fit_f0, fit_f1, fit_f2)
+fitM = list(fit_m0, fit_m1, fit_m2)
+fitA = list(fit_a0, fit_a1, fit_a2)
+
+r=2 
+ 
+for (i in 1:3){
+  fit = fitF[[i]]
+    time = fit$time
+    CIF = round(fit$CIF,r)
+    CIlow = round(fit$CIlow,r)
+    CIhi = round(fit$CIhi,r)
+ for (j in 1:5){
+        t = max(time[time<=j])
+        CI_UD[i,j] = paste0(CIF[time==t], " (",
+                            CIlow[time==t], " - ",
+                            CIhi[time==t], ")")   
+ }}
+
+for (i in 1:3){
+  fit = fitM[[i]]
+    time = fit$time
+    CIF = round(fit$CIF,r)
+    CIlow = round(fit$CIlow,r)
+    CIhi = round(fit$CIhi,r)
+ for (j in 1:5){
+        t = max(time[time<=j])
+        CI_UD[3+i,j] = paste0(CIF[time==t], " (",
+                            CIlow[time==t], " - ",
+                            CIhi[time==t], ")")   
+ }}
+
+for (i in 1:3){
+  fit = fitA[[i]]
+    time = fit$time
+    CIF = round(fit$CIF,r)
+    CIlow = round(fit$CIlow,r)
+    CIhi = round(fit$CIhi,r)
+ for (j in 1:5){
+        t = max(time[time<=j])
+        CI_UD[6+i,j] = paste0(CIF[time==t], " (",
+                            CIlow[time==t], " - ",
+                            CIhi[time==t], ")")   
+ }}
+    
+CI_UD = cbind(rep(SHL,3), CI_UD)
+
+tableS3_SH3 = CI_UD %>% kable(align = c("c"),  table.attr = 'style="width:70%;"',
+                         col.names = c("SH method","1","2","3","4","5"),
+                         caption = "Cumulative incidence of unnatural deaths, stratified by sex and self-harm method. Time at risk starts at study entry or self-harm encounter.") %>%
+                   kable_styling(position = "center") %>%    # full_width = TRUE
+                   kableExtra::group_rows(index = c("Female" = 3, "Male" = 3, "All" = 3)) #%>% 
+                   #add_header_above(c("", "Female" = 3, "Male"=3), align = "c") 
+tableS3_SH3
+
+
+
+
+```
+
+
+
+```{r, export TableS3_3, eval=saveTables}
+
+setwd(paste0(path_results,"/Tables"))
+
+# Save the table to an HTML file
+save_kable(tableS3_SH3, file = "TableS3.html")
+
+# Render the HTML file to Word using rmarkdown
+rmarkdown::pandoc_convert("TableS3.html", to = "docx", output = "TableS3_SH3.docx")
+
+```
+
+
+
+```{r CIF for UD ~ sex + SH method: Figure, fig.width = 12, fig.height = 7}
+
+Export = 1*saveFigures
+panelB = 1
+
+## Export parameters for HQ figure
+width_cm = 18  
+height_cm = width_cm*(2/3)
+dpi = 300
+
+colx = c("lightsalmon","red2","red4","steelblue1","steelblue3","darkblue")
+
+
+a = 0.2; b = 0.1 
+cf = colx[1]; cx = grDevices::col2rgb(cf)/255; cif0 = rgb(cx[1],cx[2],cx[3], alpha = a)
+cf = colx[2]; cx = grDevices::col2rgb(cf)/255; cif1 = rgb(cx[1],cx[2],cx[3], alpha = a)
+cf = colx[3]; cx = grDevices::col2rgb(cf)/255; cif2 = rgb(cx[1],cx[2],cx[3], alpha = a/2)
+cm = colx[4]; cx = grDevices::col2rgb(cm)/255; cim0 = rgb(cx[1],cx[2],cx[3], alpha = a)
+cm = colx[5]; cx = grDevices::col2rgb(cm)/255; cim1 = rgb(cx[1],cx[2],cx[3], alpha = a)
+cm = colx[6]; cx = grDevices::col2rgb(cm)/255; cim2 = rgb(cx[1],cx[2],cx[3], alpha = a/2)
+
+leg = NA
+leg[1] = paste0("No prior NF-SH") 
+leg[2] = paste0("Less lethal") 
+leg[3] = paste0("Highly lethal") 
+
+yL = 5.2
+xL = 5
+cx = 1.2
+par(cex=cx); L=2
+
+
+##  Figure Export
+if (Export==1){
+  setwd(path_figures)
+  if (panelB==1){ 
+    png("paper1/Figure3_CIF_SHmethod_B.png", width = 1200, height = 800, res = 100)
+    # png("paper1/HQ/Figure3B_HQ.png",
+    #    width = (width_cm / 2.54) * dpi,
+    #    height = (height_cm / 2.54) * dpi,
+    #    res = dpi)
+  }else{
+    png("paper1/Figure3_CIF_SHmethod.png", width = 1200, height = 700, res = 100)
+  }
+  L = 2; cx = 0.95
+}
+
+par(mfrow=c(1,2))
+if (panelB==1){
+  par(oma=c(3,0,2,0)) 
+  }else{
+    par(oma=c(3,0,0,0)) 
+  }
+
+par(mar=c(2,4,3,0), cex=cx)
+plot(fit_f0$time, fit_f0$CIF, pch="", xlim = c(0,xL), ylim = c(0,yL), 
+     xlab = "", #Years since study entry or age group change",
+     ylab = "Cumulative  incidence  (%)",
+     main = "Female") 
+polygon(x=c(fit_f2$time,  rev(fit_f2$time)), 
+        y=c(fit_f2$CIlow, rev(fit_f2$CIhi)),  
+        col = cif2, border = FALSE)
+polygon(x=c(fit_f1$time,  rev(fit_f1$time)), 
+        y=c(fit_f1$CIlow, rev(fit_f1$CIhi)),  
+        col = cif1, border = FALSE)
+polygon(x=c(fit_f0$time,  rev(fit_f0$time)), 
+        y=c(fit_f0$CIlow, rev(fit_f0$CIhi)),  
+        col = cif0, border = FALSE)
+abline(h=(0:10), lwd=c(2,1), col="grey80")
+lines(fit_f0$time, fit_f0$CIF, col=colx[1], lwd=L)
+lines(fit_f1$time, fit_f1$CIF, col=colx[2], lwd=L)
+lines(fit_f2$time, fit_f2$CIF, col=colx[3], lwd=L)
+legend("topleft", title="Self-harm method", rev(leg), lwd=L, col=colx[3:1], cex=0.8) 
+
+par(mar=c(2,3,3,1))
+plot(fit_m0$time, fit_m0$CIF, pch="", xlim = c(0,xL), ylim = c(0,yL), 
+     xlab = "", #Years since study entry or age group change",
+     ylab = "", #Cumulative  incidence  (%)",
+     main = "Male") 
+polygon(x=c(fit_m2$time,  rev(fit_m2$time)), 
+        y=c(fit_m2$CIlow, rev(fit_m2$CIhi)),  
+        col = cim2, border = FALSE)
+polygon(x=c(fit_m1$time,  rev(fit_m1$time)), 
+        y=c(fit_m1$CIlow, rev(fit_m1$CIhi)),  
+        col = cim1, border = FALSE)
+polygon(x=c(fit_m0$time,  rev(fit_m0$time)), 
+        y=c(fit_m0$CIlow, rev(fit_m0$CIhi)),  
+        col = cim0, border = FALSE)
+abline(h=(0:10), lwd=c(2,1), col="grey80")
+lines(fit_m0$time, fit_m0$CIF, col=colx[4], lwd=L)
+lines(fit_m1$time, fit_m1$CIF, col=colx[5], lwd=L)
+lines(fit_m2$time, fit_m2$CIF, col=colx[6], lwd=L)
+legend("topleft", title="Self-harm method", rev(leg), lwd=L, col=colx[6:4], cex=0.8)
+
+# Add a common x-axis label and common title
+mtext("Years since study entry or index NF-SH encounter", side=1, outer=TRUE, line=1, cex=cx)
+if (panelB==1){
+  mtext(" B", side=3, outer=TRUE, line=1, font=par("font.main"), cex=cx*par("cex.main"), adj=0)
+}
+
+if (Export==1) dev.off()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+##  RISK FACTORS OF UNNATURAL DEATH
+
+
+###  Split Data for time-varying covariates
+####  At every status change for SH, HIV, MHD
+
+
+```{r UD risk factors: Split time @ SH}
+
+##    Outcome y: U.death_y / U.death_cr (1 UD, 2 ND..)
+##    FU time: FU_time_sui  # time end at ISH when completed suicide == 1
+
+
+dd_wide = dd_wide %>% mutate(SH_timex = ifelse(SH_grp==0, NA, SH_time))         ##  timex excluding completed suicides
+
+
+##  Outcome: Unnatural death  
+dd_ud = tmerge(data1=dd_wide, data2=dd_wide, id=id, y=event(FU_time_sui, U.death_y)) 
+
+
+##  Split time at SH  
+dd_ud_new = tmerge(data1=dd_ud, data2=dd_ud, id=id, SH=tdc(SH_timex))
+
+##  SH  method
+dd_ud_new = dd_ud_new %>% mutate(SH_method3 = as.factor(ifelse(SH==0, "No SH", as.character(SH_method3))))
+dd_ud_new$SH_method3 = relevel(as.factor(dd_ud_new$SH_method3), ref = "No SH")
+
+##  Age at tstart
+dd_ud_new = dd_ud_new %>% mutate(age_tstart = tstart + age_start10,
+                                 age_end = tstop + age_start10) %>% 
+                          mutate(age_tstart_cat4 = cut(age_tstart, c(10,15,25,40,100), right=FALSE)) 
+
+```
+
+
+
+```{r UD risk factors: Split time @ HIV & MHD}
+
+##  Split time at HIV status change
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, HIV=tdc(hiv_time))
+
+#  Split data at MD diagnoses
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, ORG=tdc(org_time)) 
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, SU=tdc(su_time)) 
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, PSY=tdc(psy_time)) 
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, BP=tdc(bp_time)) 
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, DEP=tdc(dep_time)) 
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, ANX=tdc(anx_time)) 
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, PER=tdc(per_time)) 
+dd_ud_new = tmerge(data1=dd_ud_new, data2=dd_ud, id=id, OTH=tdc(oth_time)) 
+
+##  Age at tstart
+dd_ud_new = dd_ud_new %>% mutate(age_tstart = age_start10 + tstart,
+                                 age_tstop = age_start10 + tstop) %>% 
+                          mutate(age_tstart_cat4 = cut(age_tstart, c(10,15,25,40,100), right=FALSE)) 
+
+```
+
+
+
+```{r UD: Reset DEP after BP }
+
+##  DEP & ANX re-set to 0 at diagnosis of BP / PSY
+dd_ud_new = dd_ud_new %>% mutate(DEP_x = DEP*(1-BP))
+
+
+```
+
+
+##  Cox models:  SH method, Age as timeline
+
+###  Adjusted model(s) 
+####  Age as timeline 
+####  Included risk factors: SH method, HIV, MHD | stratified by sex
+
+
+```{r UD: Cox model - age as timeline}
+
+##  Cox model
+cox_ud_f = coxph(Surv(age_tstart, age_tstop, y) ~ 
+                  SH_method3 + 
+                  ORG + SU + PSY + BP + 
+                  DEP_x +  
+                  ANX + PER + OTH,
+                data = dd_ud_new %>% filter(sex=="Female"))   
+
+##  Cox model
+cox_ud_m = coxph(Surv(age_tstart, age_tstop, y) ~ 
+                  SH_method3 + 
+                  ORG + SU + PSY + BP + 
+                  DEP_x +
+                  ANX + PER + OTH,
+                data = dd_ud_new %>% filter(sex=="Male"))   
+
+r = 2
+cox_ud_coefs_f = round(summary(cox_ud_f)$conf.int[,c(1,3:4)],r)
+cox_ud_coefs_m = round(summary(cox_ud_m)$conf.int[,c(1,3:4)],r)
+
+
+```
+
+```{r UD: Cox model SHm - Table}
+
+cox_ud_tbl = cox.results(cox_ud_f) %>% 
+             cbind(cox.results(cox_ud_m)) %>% 
+             kable(align = c("c"),  table.attr = 'style="width:70%;"',
+                   caption = "Estimated hazard ratios (HR) from Cox PH model using data 
+                   on all participants with self-harm event (excluding completed suicides).")  %>%
+             kable_styling(position = "center") %>%
+             add_header_above(c("","Females" = 3, "Males" = 3), align = "c") 
+
+cox_ud_tbl
+            
+```
+
+
+
+```{r UD risk factors: Export Cox results Table - SHm, eval=saveTables}
+
+setwd(paste0(path_results,"/Tables"))
+
+# Save the table to an HTML file
+save_kable(cox_ud_tbl, file = "cox_ud_tbl.html")
+
+# Render the HTML file to Word using rmarkdown
+rmarkdown::pandoc_convert("cox_ud_tbl.html", to = "docx", output = "cox_UD_tbl_SHm.docx")
+
+```
+
+
+
+
+###  Unadjusted models
+####  Age as timeline 
+
+
+```{r UD risk factors: Univariable Cox models - SHm}
+
+r = 2   # round to r significant digits
+
+##  Univariable model
+sexx = "Female"
+dd = dd_ud_new %>% filter(sex==sexx)
+
+cox_ud_1 = coxph(Surv(dd$age_tstart, dd$age_tstop, dd$y) ~ dd$SH_method3)
+cox_ud_cc = cbind(round(summary(cox_ud_1)$conf.int[,c(1,3:4)],r), summary(cox_ud_1)$coef[,5])
+
+cox_ud_all.coefs = cbind(cox_ud_cc[,-4],  cox_ud_coefs_f[1:2,]) 
+rownames(cox_ud_all.coefs) = rownames(cox_ud_coefs_f)[1:2]
+
+cox_ud_coefs_f = cox_ud_all.coefs
+
+
+sexx = "Male"
+dd = dd_ud_new %>% filter(sex==sexx)
+cox_ud_1 = coxph(Surv(dd$age_tstart, dd$age_tstop, dd$y) ~ dd$SH_method3)
+cox_ud_cc = cbind(round(summary(cox_ud_1)$conf.int[,c(1,3:4)],r), summary(cox_ud_1)$coef[,5])
+
+cox_ud_all.coefs = cbind(cox_ud_cc[,-4],  cox_ud_coefs_m[1:2,]) 
+rownames(cox_ud_all.coefs) = rownames(cox_ud_coefs_m)[1:2]
+
+cox_ud_coefs_m = cox_ud_all.coefs
+
+```
+
+```{r Safe Cox coefs: SH method, eval=saveCoefs}
+
+setwd(path_results)
+write.csv(cox_ud_coefs_f, "UD_Cox_coefs_SHm_f.csv")
+write.csv(cox_ud_coefs_m, "UD_Cox_coefs_SHm_m.csv")
+
+```
+
+
+###  Forest plot
+####  Hazards ratios for SH method + factors associated with UD, stratified by sex 
+
+
+```{r SH method: forest plot unadj+adjusted }
+
+# setwd(path_results)
+# cox_ud_coefs_f = read.csv("UD_Cox_coefs_SHm_f.csv")[,-1]
+# cox_ud_coefs_m = read.csv("UD_Cox_coefs_SHm_m.csv")[,-1]
+
+coefs = cbind(cox_ud_coefs_f, cox_ud_coefs_m)
+
+
+###   FOREST PLOT OF RESULTS  ###
+
+coef_names = c("Self-harm method  ", "No prior NF-SH ", "Less lethal", "Highly lethal")
+
+
+##  Create a data frame for results
+dt = data.frame(Factor = coef_names, cat = NA, 
+                est1 = NA, low1 = NA, hi1 = NA, 
+                est2 = NA, low2 = NA, hi2 = NA,
+                est3 = NA, low3 = NA, hi3 = NA,
+                est4 = NA, low4 = NA, hi4 = NA)
+
+
+##  Rows with coefficient estimates
+w1 = c(3,4)                        
+
+#  Coef: Model female - unadj
+dt$est1[w1] <- coefs[,1]
+dt$low1[w1] <- coefs[,2] 
+dt$hi1[w1]  <- coefs[,3]
+
+#  Coef: Model female - adj
+dt$est2[w1] <- coefs[,4]
+dt$low2[w1] <- coefs[,5] 
+dt$hi2[w1]  <- coefs[,6]
+
+#  Coef: Model male - unadj
+dt$est3[w1] <- coefs[,7]
+dt$low3[w1] <- coefs[,8]
+dt$hi3[w1]  <- coefs[,9]
+
+
+#  Coef: Model male - adj
+dt$est4[w1] <- coefs[,10]
+dt$low4[w1] <- coefs[,11]
+dt$hi4[w1]  <- coefs[,12]
+
+
+##  Rows with variable names
+w2 = c(1)
+dt$cat[w2] = 1
+
+
+##  Make indent for categories
+dt$Factor <- ifelse(!is.na(dt$cat), dt$Factor, paste0("     ", dt$Factor))
+
+
+##  Create an empty column for the plotting
+dt$` ` = paste(rep(" ",50), collapse = " ")  
+
+##  Column for OR and CI labels
+dt$`HR (95% CI)` = ifelse(is.na(dt$est1), "", 
+                          sprintf("%.2f (%.2f to %.2f) \n%.2f (%.2f to %.2f) \n%.2f (%.2f to %.2f) \n%.2f (%.2f to %.2f)", 
+                                  dt$est1, dt$low1, dt$hi1, 
+                                  dt$est2, dt$low2, dt$hi2,
+                                  dt$est3, dt$low3, dt$hi3,
+                                  dt$est4, dt$low4, dt$hi4))
+
+
+##  Rows with reference groups
+w3 = c(2)                                  
+
+##  Add 'OR = 1' for the reference groups
+dt$est1[w3] = 1
+dt$low1[w3] = 1 
+dt$hi1[w3] = 1
+dt$`HR (95% CI)`[w3] <- paste0(paste(rep(" ",13), collapse = ""), 1)
+
+dt$est2[w3] = 1
+dt$low2[w3] = 1 
+dt$hi2[w3] = 1
+
+dt$est3[w3] = 1
+dt$low3[w3] = 1 
+dt$hi3[w3] = 1
+
+dt$est4[w3] = 1
+dt$low4[w3] = 1 
+dt$hi4[w3] = 1
+
+##  Format results (round)
+# dt[,16]
+dt[4,16] = "29.2 (7.29 to 117) \n20.1 (5.00 to 80.6) \n11.2 (3.60 to 34.6) \n8.23 (2.65 to 25.6)"  ##   
+
+##  Set colors for models 
+col1 = "red1"
+col2 = "red3"
+col3 = "dodgerblue1"
+col4 = "dodgerblue3"
+
+cf = col1; cx = grDevices::col2rgb(cf)/255; col1x = rgb(cx[1],cx[2],cx[3], alpha = 0.3)
+cm = col3; cx = grDevices::col2rgb(cm)/255; col3x = rgb(cx[1],cx[2],cx[3], alpha = 0.3)
+
+names(dt)[1] = "  "
+
+##  Forest plot features (theme)
+tm = forest_theme(base_size = 14,
+                  refline_lty = "solid",
+                  ci_col = c(col1x, col2, col3x, col4),
+                  ci_fill = c(col1x, col2 , col3x, col4), #, col3
+                  ci_lwd = 3,
+                  legend_name = "Model  ",
+                  legend_value = c("  Females (age-adjusted)   ", "  Females (fully adjusted)  ", 
+                                   "  Males (age-adjusted)   ", "  Males (fully adjusted)  " ),
+                  legend_position = "top",
+)
+
+```
+```{r, fig.cap="Results from Cox regression models. Hazard ratios of unnatural death, with 95% confidence intervals (CI). Age is timeline", fig.width = 12, fig.height = 6}
+
+p = forest(dt[ ,c(1,15,16)],  # which columns of the data frame we want to show
+           est = list(dt$est1, dt$est2, dt$est3, dt$est4), #, dt$est3
+           lower = list(dt$low1, dt$low2,dt$low3, dt$low4 ), 
+           upper = list(dt$hi1, dt$hi2, dt$hi3, dt$hi4 ),
+           sizes = .8,
+           ci_column = 2,
+           ref_line = 1,
+           xlim = c(0.35, 91),  #  Set  limits to match CIs
+           x_trans = "log",
+           xlab = "\n                  Hazard ratio (95% CI)",
+           nudge_y = c(0.2),
+           ticks_at = c(0.5,1,2,4,8,16,32,64),
+           theme = tm
+)
+
+plot(p)
+ 
+```
+
+```{r Export forest plot - SHm, eval=saveFigures}
+
+##  Figure Export
+
+setwd(path_figures)
+png("paper1/Fig4_Forest_UD_SHm.png", width = 1050, height = 500, res = 100)
+
+#plot(p)
+grid.newpage()
+grid.draw(p)
+
+# Add left-aligned title manually
+grid.text(" B", x = unit(0, "npc"), y = unit(1, "npc") - unit(0.5, "lines"),
+          just = c("left", "top"),
+          gp = gpar(fontsize = 16, fontface = "bold"))  # Adjust fontsize if needed
+
+dev.off()
+```
+
+<br>
+
+
+##  Cox models:  SH event, Age as timeline
+
+###  Adjusted model(s)
+####  Age as timeline 
+####  Included risk factors: ISH, HIV, MHD | stratified by sex
+
+
+
+```{r UD: Cox model - ISH, age as timeline}
+
+##  Cox model
+cox_ud_f = coxph(Surv(age_tstart, age_tstop, y) ~ 
+                  SH + 
+                  ORG + SU + PSY + BP + 
+                  DEP_x +  
+                  ANX + PER + OTH,
+                data = dd_ud_new %>% filter(sex=="Female"))   
+
+##  Cox model
+cox_ud_m = coxph(Surv(age_tstart, age_tstop, y) ~ 
+                  SH + 
+                  ORG + SU + PSY + BP + 
+                  DEP_x +
+                  ANX + PER + OTH,
+                data = dd_ud_new %>% filter(sex=="Male"))   
+
+
+r = 2
+cox_ud_coefs_f = round(summary(cox_ud_f)$conf.int[,c(1,3:4)],r)
+cox_ud_coefs_m = round(summary(cox_ud_m)$conf.int[,c(1,3:4)],r)
+
+
+```
+
+```{r UD: Cox model SH - Table}
+
+cox_ud_tbl = cox.results(cox_ud_f) %>% 
+             cbind(cox.results(cox_ud_m)) %>% 
+             kable(align = c("c"),  table.attr = 'style="width:70%;"',
+                   caption = "Estimated hazard ratios (HR) of Natural Death from separate Cox models for each sex.")  %>%
+             kable_styling(position = "center") %>%
+             add_header_above(c("","Females" = 3, "Males" = 3), align = "c") 
+
+cox_ud_tbl
+            
+```
+
+
+
+```{r UD risk factors: Export Cox results Table - SH, eval=saveTables}
+
+setwd(paste0(path_results,"/Tables"))
+
+# Save the table to an HTML file
+save_kable(cox_ud_tbl, file = "cox_ud_tbl.html")
+
+# Render the HTML file to Word using rmarkdown
+rmarkdown::pandoc_convert("cox_ud_tbl.html", to = "docx", output = "cox_UD_tbl_SH.docx")
+
+```
+
+
+
+
+
+###  Unadjusted models
+####  Age as timeline 
+
+
+```{r UD risk factors: Univariable Cox models - SH}
+
+r = 2   # round to r significant digits
+
+##  Univariable model
+sexx = "Female"
+dd = dd_ud_new %>% filter(sex==sexx)
+
+cox_ud_1 = coxph(Surv(dd$age_tstart, dd$age_tstop, dd$y) ~ dd$SH)
+cox_ud_cc = c(round(summary(cox_ud_1)$conf.int[,c(1,3:4)],r), summary(cox_ud_1)$coef[,5])
+
+cox_ud_all.coefs = c(cox_ud_cc[-4],  cox_ud_coefs_f[1,]) 
+cox_ud_coefs_f = cox_ud_all.coefs
+
+
+sexx = "Male"
+dd = dd_ud_new %>% filter(sex==sexx)
+cox_ud_1 = coxph(Surv(dd$age_tstart, dd$age_tstop, dd$y) ~ dd$SH)
+cox_ud_cc = c(round(summary(cox_ud_1)$conf.int[,c(1,3:4)],r), summary(cox_ud_1)$coef[,5])
+
+cox_ud_all.coefs = c(cox_ud_cc[-4],  cox_ud_coefs_m[1,]) 
+cox_ud_coefs_m = cox_ud_all.coefs
+
+```
+
+```{r Safe Cox coefs: SH, eval=saveCoefs}
+
+setwd(path_results)
+write.csv(cox_ud_coefs_f, "UD_Cox_coefs_SH_f.csv")
+write.csv(cox_ud_coefs_m, "UD_Cox_coefs_SH_m.csv")
+
+```
+
+###  Forest plot
+####  Hazards ratios for factors associated with UD, stratified by sex 
+
+
+```{r SH event: forest plot unadj+adjusted }
+
+
+##  Load model coefs
+# setwd(path_results)
+# cox_ud_coefs_f = read.csv("UD_Cox_coefs_SH_f.csv")[1,-1]
+# cox_ud_coefs_m = read.csv("UD_Cox_coefs_SH_m.csv")[1,-1]
+
+coefs = matrix(c(cox_ud_coefs_f, cox_ud_coefs_m), 1, 12)
+
+
+###   FOREST PLOT OF RESULTS  ###
+
+coef_names =  c("Prior NF-SH          ", "No", "Yes")
+
+
+##  Create a data frame for results
+dt = data.frame(Factor = coef_names, cat = NA, 
+                est1 = NA, low1 = NA, hi1 = NA, 
+                est2 = NA, low2 = NA, hi2 = NA,
+                est3 = NA, low3 = NA, hi3 = NA,
+                est4 = NA, low4 = NA, hi4 = NA)
+
+
+##  Rows with coefficient estimates
+w1 = c(3)                        
+
+#  Coef: Model female - unadj
+dt$est1[w1] <- coefs[,1]
+dt$low1[w1] <- coefs[,2] 
+dt$hi1[w1]  <- coefs[,3]
+
+#  Coef: Model female - adj
+dt$est2[w1] <- coefs[,4]
+dt$low2[w1] <- coefs[,5] 
+dt$hi2[w1]  <- coefs[,6]
+
+#  Coef: Model male - unadj
+dt$est3[w1] <- coefs[,7]
+dt$low3[w1] <- coefs[,8]
+dt$hi3[w1]  <- coefs[,9]
+
+
+#  Coef: Model male - adj
+dt$est4[w1] <- coefs[,10]
+dt$low4[w1] <- coefs[,11]
+dt$hi4[w1]  <- coefs[,12]
+
+
+##  Rows with variable names
+w2 = c(1)
+dt$cat[w2] = 1
+
+
+##  Make indent for categories
+dt$Factor <- ifelse(!is.na(dt$cat), dt$Factor, paste0("     ", dt$Factor))
+
+
+##  Create an empty column for the plotting
+dt$` ` = paste(rep(" ",50), collapse = " ")  
+
+##  Column for OR and CI labels
+dt$`HR (95% CI)` = ifelse(is.na(dt$est1), "", 
+                          sprintf("%.2f (%.2f to %.2f) \n%.2f (%.2f to %.2f) \n%.2f (%.2f to %.2f) \n%.2f (%.2f to %.2f)", 
+                                  dt$est1, dt$low1, dt$hi1, 
+                                  dt$est2, dt$low2, dt$hi2,
+                                  dt$est3, dt$low3, dt$hi3,
+                                  dt$est4, dt$low4, dt$hi4))
+
+
+##  Rows with reference groups
+w3 = c(2)                                  
+
+##  Add 'OR = 1' for the reference groups
+dt$est1[w3] = 1
+dt$low1[w3] = 1 
+dt$hi1[w3] = 1
+dt$`HR (95% CI)`[w3] <- paste0(paste(rep(" ",13), collapse = ""), 1)
+
+dt$est2[w3] = 1
+dt$low2[w3] = 1 
+dt$hi2[w3] = 1
+
+dt$est3[w3] = 1
+dt$low3[w3] = 1 
+dt$hi3[w3] = 1
+
+dt$est4[w3] = 1
+dt$low4[w3] = 1 
+dt$hi4[w3] = 1
+
+##  Review if results are formatted correctly
+# dt
+
+##  Set colors for models 
+
+col1 = "red1"
+col2 = "red3"
+col3 = "dodgerblue1"
+col4 = "dodgerblue3"
+
+cf = col1; cx = grDevices::col2rgb(cf)/255; col1x = rgb(cx[1],cx[2],cx[3], alpha = 0.3)
+cm = col3; cx = grDevices::col2rgb(cm)/255; col3x = rgb(cx[1],cx[2],cx[3], alpha = 0.3)
+
+names(dt)[1]="  "
+
+##  Forest plot features (theme)
+tm = forest_theme(base_size = 14,
+                  refline_lty = "solid",
+                  #ci_pch = c(15, 18),
+                  ci_col = c(col1x, col2, col3x, col4),
+                  ci_fill = c(col1x, col2 , col3x, col4), #, col3
+                  ci_lwd = 3,
+                  legend_name = "Model  ",
+                  legend_value = c("  Females (age-adjusted)   ", "  Females (fully adjusted)  ", 
+                                   "  Males (age-adjusted)   ", "  Males (fully adjusted)  " ),
+                  legend_position = "top"
+)
+
+```
+
+```{r, fig.cap="Results from Cox regression models. Hazard ratios of unnatural death, with 95% confidence intervals (CI). Age is timeline", fig.width = 12, fig.height = 6}
+
+p = forest(dt[ ,c(1,15,16)],  # which columns of the data frame we want to show
+           est = list(dt$est1, dt$est2, dt$est3, dt$est4), #, dt$est3
+           lower = list(dt$low1, dt$low2,dt$low3, dt$low4 ), 
+           upper = list(dt$hi1, dt$hi2, dt$hi3, dt$hi4 ),
+           sizes = .8,
+           ci_column = 2,
+           ref_line = 1,
+           xlim = c(0.35, 91),  #  Set limits to match CIs
+           x_trans = "log",
+           xlab = "\n                  Hazard ratio (95% CI)",
+           nudge_y = c(0.2),
+           ticks_at = c(0.5,1,2,4,8,16,32,64),
+           theme = tm 
+)
+
+plot(p) 
+ 
+```
+
+```{r Export forest plot - SH, eval=saveFigures}
+
+##  Figure Export
+
+setwd(path_figures)
+png("paper1/Fig4_Forest_UD_SH.png", width = 1050, height = 400, res = 100)
+
+#par(mar=c(5,4,4,1))  
+#plot(p)
+
+# Draw plot
+grid.newpage()
+grid.draw(p)
+
+# Add left-aligned title manually
+grid.text(" A", x = unit(0, "npc"), y = unit(1, "npc") - unit(0.5, "lines"),
+          just = c("left", "top"),
+          gp = gpar(fontsize = 16, fontface = "bold"))  # Adjust fontsize if needed
+
+dev.off()
+```
+
+<br>
+
+
+
+
+
+
+
+
+
+
