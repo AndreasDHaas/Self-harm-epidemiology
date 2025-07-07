@@ -1,0 +1,50 @@
+{smcl}
+{* *! version 1.1  07may2022}{...}
+{viewerdialog listif "dialog listif"}{...}
+{vieweralsosee "[D] listif" "mansection D listif"}{...}
+{vieweralsosee "" "--"}{...}
+{vieweralsosee "[P] display" "help display"}{...}
+{vieweralsosee "[D] edit" "help edit"}{...}
+{vieweralsosee "[P] tabdisp" "help tabdisp"}{...}
+{vieweralsosee "[R] table" "help table"}{...}
+{viewerjumpto "Syntax" "listif##syntax"}{...}
+{viewerjumpto "Menu" "listif##menu"}{...}
+{viewerjumpto "Description" "listif##description"}{...}
+{viewerjumpto "Options" "listif##options"}{...}
+{viewerjumpto "Remarks" "listif##remarks"}{...}
+{viewerjumpto "Examples" "listif##examples"}{...}
+{p2colset 1 13 15 2}{...}
+{p2col:{bf:[D] listif} }List values of variables of all records of a random sample of individuals if condition is true {p_end}
+
+
+{marker syntax}{...}
+{title:Syntax}
+
+{p 8 14 2}
+{opt listif} [{it:{help varlist}}] {ifin} [{cmd:,} {it:options}]
+
+{synoptset 21 tabbed}{...}
+{synopthdr}
+{synoptline}
+{syntab :Required}
+{synopt :{opt id:}}varname of variable that identifies individuals in multiple-record ID dataset
+formats{p_end}
+{synopt :{opt sort:}}varlist determining sorting of list
+
+{syntab :Options}
+{synopt :{opt n:}}number of individuals listed, default is 10{p_end}
+{synopt :{opt seed:}}seed, seed can not be set to -88888{p_end}
+{synopt :{opt nolab:el}}no value lables{p_end}
+{synopt :{opt string(#):}}truncate string variables to # display columns (default 30){p_end}
+{synopt :{opt global(macroname):}}saves global macro with identifiers of selected observations {p_end}
+
+{marker examples}{...}
+{title:Examples}
+
+{phang}{cmd:. sysuse} bplong.dta{p_end}
+{phang}{cmd:. listif} patient sex agegrp when bp if bp==153, id(patient) sort(patient) sepby(patient when) n(5){p_end}
+{phang}{cmd:. listif} patient sex agegrp when bp if bp==153, id(patient) sort(patient) sepby(patient when) n(5) global(bp153){p_end}
+{phang}{cmd:. display} `"$bp153"' {p_end}
+{phang}{cmd:. list} patient sex agegrp when bp if inlist(patient, $bp153), sepby(patient){p_end}
+
+
