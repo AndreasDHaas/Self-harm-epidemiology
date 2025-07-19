@@ -75,7 +75,6 @@ if "$cohort" == "AfAc" {
 				assert inlist(hiv1_y, 0, 1)
 				assert hiv1_y == 1 if hiv1_d !=.
 				count if hiv1_d ==. & hiv1_y == 1 // !!! AfA members wihtout other HIV indicator have missing hiv_d !!! 
-				*replace hiv1_d = start if hiv1_d ==. & hiv1_y==1 // ---> set HIV positive date to start of follow-up or impute hiv1_d dates <---
 				assert hiv1_d ==. if hiv1_y == 0		
 				lab define hiv 1 "HIV", replace
 				lab val hiv1_y hiv
